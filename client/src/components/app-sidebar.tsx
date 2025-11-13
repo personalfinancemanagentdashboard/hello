@@ -10,7 +10,7 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, Receipt, Target, CalendarClock, MessageSquare, Mic, TrendingUp } from "lucide-react";
+import { LayoutDashboard, Receipt, Target, CalendarClock, MessageSquare, TrendingUp } from "lucide-react";
 import { useLocation } from "wouter";
 
 const menuItems = [
@@ -43,11 +43,6 @@ const menuItems = [
     title: "AI Assistant",
     url: "/ai-chat",
     icon: MessageSquare,
-  },
-  {
-    title: "Voice Assistant",
-    url: "/voice",
-    icon: Mic,
   },
 ];
 

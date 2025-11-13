@@ -14,7 +14,6 @@ import Budgets from "@/pages/Budgets";
 import Goals from "@/pages/Goals";
 import Bills from "@/pages/Bills";
 import AIAssistant from "@/pages/AIAssistant";
-import VoiceControl from "@/pages/VoiceControl";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -32,7 +31,6 @@ function Router() {
           <Route path="/goals" component={Goals} />
           <Route path="/bills" component={Bills} />
           <Route path="/ai-chat" component={AIAssistant} />
-          <Route path="/voice" component={VoiceControl} />
         </>
       )}
       <Route component={NotFound} />
