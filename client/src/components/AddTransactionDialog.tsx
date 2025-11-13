@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Plus, Mic, MicOff } from "lucide-react";
+import { useVoiceRecognition } from "@/hooks/useVoiceRecognition";
+import { parseVoiceCommand } from "@/lib/voiceParser";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AddTransactionDialog() {
   const [open, setOpen] = useState(false);
@@ -15,18 +20,93 @@ export default function AddTransactionDialog() {
     type: "expense",
     date: new Date().toISOString().split("T")[0],
   });
+  const [lastProcessedTranscript, setLastProcessedTranscript] = useState("");
+
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const {
+    isListening,
+    transcript,
+    status,
+    error,
+    isSupported,
+    startListening,
+    stopListening,
+    resetTranscript,
+  } = useVoiceRecognition();
+
+  const createTransactionMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      const res = await apiRequest("POST", "/api/transactions", data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      toast({
+        title: "Success",
+        description: "Transaction added successfully",
+      });
+      setOpen(false);
+      setFormData({
+        title: "",
+        amount: "",
+        category: "",
+        type: "expense",
+        date: new Date().toISOString().split("T")[0],
+      });
+      setLastProcessedTranscript("");
+      resetTranscript();
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to add transaction",
+        variant: "destructive",
+      });
+      setLastProcessedTranscript("");
+      resetTranscript();
+    },
+  });
+
+  useEffect(() => {
+    if (
+      transcript &&
+      status === "processing" &&
+      transcript !== lastProcessedTranscript &&
+      !createTransactionMutation.isPending
+    ) {
+      setLastProcessedTranscript(transcript);
+      const parsed = parseVoiceCommand(transcript);
+      if (parsed) {
+        createTransactionMutation.mutate(parsed);
+        toast({
+          title: "Voice command recognized",
+          description: `Adding ${parsed.type}: ₹${parsed.amount} for ${parsed.title}`,
+        });
+      } else {
+        toast({
+          title: "Could not parse command",
+          description: "Please try again or enter manually.",
+          variant: "destructive",
+        });
+        setLastProcessedTranscript("");
+        resetTranscript();
+      }
+    }
+  }, [transcript, status, lastProcessedTranscript, createTransactionMutation.isPending, toast, resetTranscript, createTransactionMutation]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Transaction added:", formData);
-    setOpen(false);
-    setFormData({
-      title: "",
-      amount: "",
-      category: "",
-      type: "expense",
-      date: new Date().toISOString().split("T")[0],
-    });
+    createTransactionMutation.mutate(formData);
+  };
+
+  const handleVoiceToggle = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      resetTranscript();
+      startListening();
+    }
   };
 
   return (
@@ -44,6 +124,37 @@ export default function AddTransactionDialog() {
             Record a new income or expense transaction
           </DialogDescription>
         </DialogHeader>
+
+        {isSupported && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                {status === "idle" && "Click mic to use voice input"}
+                {status === "listening" && "Listening... Speak now"}
+                {status === "processing" && "Processing your command..."}
+                {status === "error" && error}
+              </p>
+              <Button
+                type="button"
+                size="icon"
+                variant={isListening ? "destructive" : "outline"}
+                onClick={handleVoiceToggle}
+                data-testid="button-voice-input"
+                disabled={status === "processing"}
+                className={isListening ? "animate-pulse" : ""}
+              >
+                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </Button>
+            </div>
+            {transcript && (
+              <div className="p-2 bg-muted rounded-md">
+                <p className="text-xs text-muted-foreground">Recognized:</p>
+                <p className="text-sm" data-testid="text-voice-transcript">{transcript}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="title">Description</Label>
@@ -118,8 +229,13 @@ export default function AddTransactionDialog() {
             />
           </div>
 
-          <Button type="submit" className="w-full" data-testid="button-submit-transaction">
-            Add Transaction
+          <Button 
+            type="submit" 
+            className="w-full" 
+            data-testid="button-submit-transaction"
+            disabled={createTransactionMutation.isPending}
+          >
+            {createTransactionMutation.isPending ? "Adding..." : "Add Transaction"}
           </Button>
         </form>
       </DialogContent>
